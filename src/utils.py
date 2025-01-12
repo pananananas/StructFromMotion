@@ -2,6 +2,7 @@ from plyfile import PlyData, PlyElement
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import numpy as np
+import pickle
 import sys
 import cv2
 import os
@@ -117,3 +118,41 @@ def convert_npy_to_ply(npy_file, ply_file):
     # Write to .ply file
     PlyData([ply_element], text=True).write(ply_file)
     print(f"Successfully converted {npy_file} to {ply_file}")
+
+
+def load_camera_calibration(calibration_path='output/calibration.pkl'):
+    """Load camera calibration parameters from file."""
+    if not os.path.exists(calibration_path):
+        raise FileNotFoundError(
+            f"Camera calibration file not found at {calibration_path}. "
+            "Please run camera_calibration.py first."
+        )
+    
+    with open(calibration_path, 'rb') as f:
+        calibration_data = pickle.load(f)
+    
+    return calibration_data['camera_matrix'], calibration_data['dist_coeffs']
+
+def use_camera_calibration():
+# Load camera calibration parameters
+    try:
+        K, dist = load_camera_calibration()
+        print("\nLoaded camera calibration parameters:")
+        print("Camera Matrix (K):")
+        print(K)
+        print("\nDistortion Coefficients:")
+        print(dist.ravel())
+
+    except FileNotFoundError as e:
+        print(f"\nWarning: {str(e)}")
+        print("Using default camera parameters...")
+        # Fallback to default parameters if calibration file not found
+        f_x = 3225.6
+        f_y = 3225.6
+        c_x = 2016  # Will be updated with actual image size
+        c_y = 1512  # Will be updated with actual image size
+        K = np.array([[f_x, 0, c_x],
+                    [0, f_y, c_y],
+                    [0,  0,    1]])
+        dist = np.zeros(5)  # No distortion correction
+    return K, dist
