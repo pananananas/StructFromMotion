@@ -1,3 +1,4 @@
+from plyfile import PlyData, PlyElement
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import numpy as np
@@ -92,3 +93,27 @@ def filter_points(points_3d, percentile=95):
     mask = distances < threshold
     
     return points_3d[mask]
+
+
+def convert_npy_to_ply(npy_file, ply_file):
+    # Load the .npy file
+    points = np.load(npy_file)  # Expecting shape (N, 3) or (N, 6) for RGB
+
+    if points.shape[1] == 3:
+        # Only XYZ coordinates
+        vertices = np.array([tuple(pt) for pt in points],
+                           dtype=[('x', 'f4'), ('y', 'f4'), ('z', 'f4')])
+    elif points.shape[1] >= 6:
+        # XYZ plus RGB
+        vertices = np.array([tuple(pt[:6]) for pt in points],
+                           dtype=[('x', 'f4'), ('y', 'f4'), ('z', 'f4'),
+                                  ('red', 'u1'), ('green', 'u1'), ('blue', 'u1')])
+    else:
+        raise ValueError("Unsupported .npy file format. Expected shape (N, 3) or (N, 6).")
+
+    # Create PlyElement
+    ply_element = PlyElement.describe(vertices, 'vertex')
+
+    # Write to .ply file
+    PlyData([ply_element], text=True).write(ply_file)
+    print(f"Successfully converted {npy_file} to {ply_file}")

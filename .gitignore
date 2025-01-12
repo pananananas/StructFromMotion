@@ -171,4 +171,5 @@ cython_debug/
 .pypirc
 
 data/
+output/
 .DS_Store

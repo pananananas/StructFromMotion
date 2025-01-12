@@ -2,73 +2,6 @@ from features import match_features
 import numpy as np
 import cv2
 
-def estimate_pose_and_triangulate(kp1, kp2, matches, K, debug=False):
-    """
-    Estimate camera pose and triangulate 3D points with improved error handling.
-    """
-    if len(matches) < 8:
-        if debug:
-            print("Not enough matches to compute Essential matrix.")
-        return None, None, None, None
-
-    # Extract matched keypoints
-    pts1 = np.float32([kp1[m.queryIdx].pt for m in matches])
-    pts2 = np.float32([kp2[m.trainIdx].pt for m in matches])
-
-    # Compute Essential matrix
-    E, mask = cv2.findEssentialMat(pts1, pts2, K, method=cv2.RANSAC, 
-                                  prob=0.999, threshold=3.0)
-    
-    if E is None:
-        if debug:
-            print("Essential matrix estimation failed.")
-        return None, None, None, None
-
-    # Recover pose
-    points_in_front, R, t, mask_pose = cv2.recoverPose(E, pts1, pts2, K)
-    
-    if points_in_front < 10:  # Add minimum points threshold
-        if debug:
-            print(f"Too few points in front of camera: {points_in_front}")
-        return None, None, None, None
-
-    # Triangulate points
-    P1 = K @ np.hstack((np.eye(3), np.zeros((3,1))))
-    P2 = K @ np.hstack((R, t))
-
-    pts1_h = cv2.convertPointsToHomogeneous(pts1)[:, 0, :]
-    pts2_h = cv2.convertPointsToHomogeneous(pts2)[:, 0, :]
-
-    points_4d = cv2.triangulatePoints(P1, P2, pts1.T, pts2.T)
-    points_3d = (points_4d / points_4d[3]).T[:, :3]
-
-    # Filter points based on positive depth
-    depths1 = points_3d[:, 2]
-    depths2 = (R @ points_3d.T + t).T[:, 2]
-    mask_depths = (depths1 > 0) & (depths2 > 0)
-    points_3d = points_3d[mask_depths]
-
-    if len(points_3d) < 10:  # Add minimum points threshold
-        if debug:
-            print(f"Too few valid 3D points after filtering: {len(points_3d)}")
-        return None, None, None, None
-
-    # Center and scale points only if we have valid points
-    if len(points_3d) > 0:
-        centroid = np.mean(points_3d, axis=0)
-        points_3d = points_3d - centroid
-        
-        # Avoid division by zero in scaling
-        max_abs_val = np.max(np.abs(points_3d))
-        if max_abs_val > 1e-10:  # Add small threshold
-            scale = 10.0 / max_abs_val
-            points_3d = points_3d * scale
-            t = t * scale
-        else:
-            if debug:
-                print("Points too close to origin, skipping scaling")
-    
-    return R, t, points_3d, mask_pose
 
 def estimate_pose_and_triangulate(kp1, kp2, matches, K, debug=False):
     """
@@ -87,7 +20,7 @@ def estimate_pose_and_triangulate(kp1, kp2, matches, K, debug=False):
 
     # Compute Essential matrix with more relaxed threshold
     E, mask = cv2.findEssentialMat(pts1, pts2, K, method=cv2.RANSAC, 
-                                  prob=0.999, threshold=3.0)  # Increased threshold
+                                  prob=0.999, threshold=3.0)
     if debug:
         print(f"Number of matches after RANSAC: {len(matches)}")
     if E is None:
@@ -144,63 +77,183 @@ def estimate_pose_and_triangulate(kp1, kp2, matches, K, debug=False):
     return R, t, points_3d, mask_pose
 
 
-def reconstruct_sequence(frames, keypoints_list, descriptors_list, K, max_frame_gap=3):
+def estimate_poses_and_triangulate_sequence(frames, keypoints_list, descriptors_list, K, debug=False):
     """
-    Reconstruct 3D scene with adaptive frame selection
+    Estimate camera poses and triangulate 3D points for a sequence of frames.
+    
+    Parameters:
+        frames: List of input frames
+        keypoints_list: List of keypoints for each frame
+        descriptors_list: List of descriptors for each frame
+        K: Camera intrinsic matrix
+        debug: Boolean for debug printing
+    
+    Returns:
+        all_points_3d: List of 3D points
+        camera_poses: List of (R, t) pairs for each camera pose
+        point_tracks: Dictionary mapping point indices to their 2D observations
     """
-    all_points_3d = []
-    all_cameras = []
+    if len(frames) < 2:
+        print("Need at least 2 frames")
+        return None, None, None
+
+    # Initialize structures
+    camera_poses = []  # List to store all camera poses (R, t)
+    all_points_3d = []  # List to store all 3D points
+    point_tracks = {}   # Dictionary to store point tracks
     
     # Initialize first camera at origin
-    all_cameras.append((np.eye(3), np.zeros((3, 1))))
+    camera_poses.append((np.eye(3), np.zeros((3, 1))))
     
-    i = 0
-    while i < len(frames) - 1:
-        success = False
+    # Process second frame to establish initial reconstruction
+    matches_01 = match_features(descriptors_list[0], descriptors_list[1])
+    R, t, points_3d, mask = estimate_pose_and_triangulate(
+        keypoints_list[0], keypoints_list[1], matches_01, K, debug)
+    
+    if R is None:
+        print("Failed to initialize with first two frames")
+        return None, None, None
         
-        # Try different frame gaps if initial matching fails
-        for frame_gap in range(1, max_frame_gap + 1):
-            if i + frame_gap >= len(frames):
-                break
-                
-            matches = match_features(descriptors_list[i], descriptors_list[i + frame_gap])
+    camera_poses.append((R, t))
+    all_points_3d = points_3d.tolist()
+    
+    # Initialize point tracks from first two frames
+    for idx, match in enumerate(matches_01):
+        if mask[idx]:
+            point_tracks[len(point_tracks)] = {
+                0: keypoints_list[0][match.queryIdx].pt,
+                1: keypoints_list[1][match.trainIdx].pt
+            }
+    
+    # Process remaining frames
+    for i in range(2, len(frames)):
+        if debug:
+            print(f"\nProcessing frame {i}")
+        
+        # Match with multiple previous frames to establish more correspondences
+        points_3d = []
+        points_2d = []
+        used_keypoints = set()  # Track used keypoints to avoid duplicates
+        
+        # Look at last 5 frames for matches
+        for prev_idx in range(max(0, i-5), i):
+            matches = match_features(descriptors_list[prev_idx], descriptors_list[i])
+            if debug:
+                print(f"Matches with frame {prev_idx}: {len(matches)}")
             
-            if len(matches) >= 50:  # Require more matches for reliability
-                print(f"Found {len(matches)} matches between frames {i} and {i + frame_gap}")
-                
-                R, t, points_3d, mask = estimate_pose_and_triangulate(
-                    keypoints_list[i], 
-                    keypoints_list[i + frame_gap], 
-                    matches, 
-                    K,
-                    debug=True
-                )
-                
-                if R is not None and t is not None and points_3d is not None and len(points_3d) > 20:
-                    # Transform points to global coordinate system
-                    if len(all_cameras) > 1:
-                        R_prev, t_prev = all_cameras[-1]
-                        R_new = R_prev @ R
-                        t_new = t_prev + R_prev @ t
-                        all_cameras.append((R_new, t_new))
-                        points_3d = (R_prev @ points_3d.T + t_prev).T
-                    else:
-                        all_cameras.append((R, t))
-                    
-                    all_points_3d.extend(points_3d)
-                    success = True
-                    i += frame_gap
-                    break
+            # Find 2D-3D correspondences through point tracks
+            for track_id, track in point_tracks.items():
+                if prev_idx in track:  # If point was seen in previous frame
+                    for match in matches:
+                        curr_kp_idx = match.trainIdx
+                        if (curr_kp_idx not in used_keypoints and 
+                            match.queryIdx == track[prev_idx]):
+                            points_3d.append(all_points_3d[track_id])
+                            points_2d.append(keypoints_list[i][curr_kp_idx].pt)
+                            used_keypoints.add(curr_kp_idx)
+                            track[i] = curr_kp_idx  # Add to track
+                            break
         
+        if len(points_3d) < 8:
+            if debug:
+                print(f"Not enough correspondences for frame {i}, found {len(points_3d)}")
+            continue
+            
+        # Convert to numpy arrays
+        points_3d = np.array(points_3d)
+        points_2d = np.array(points_2d)
+        
+        # Estimate pose using PnP with more robust parameters
+        success, rvec, tvec, inliers = cv2.solvePnPRansac(
+            points_3d, points_2d, K, None,
+            iterationsCount=500,  # More iterations for better results
+            reprojectionError=5.0,  # Slightly more permissive threshold
+            confidence=0.99,
+            flags=cv2.SOLVEPNP_ITERATIVE
+        )
+            
         if not success:
-            print(f"Failed to find good matches after frame {i}, skipping...")
-            i += 1
+            print(f"PnP failed for frame {i}")
+            continue
+            
+        # Convert rotation vector to matrix
+        R_new, _ = cv2.Rodrigues(rvec)
+        t_new = tvec
+        
+        # Verify pose by checking reprojection error
+        proj_points, _ = cv2.projectPoints(points_3d, rvec, tvec, K, None)
+        proj_points = proj_points.reshape(-1, 2)
+        reproj_errors = np.linalg.norm(proj_points - points_2d, axis=1)
+        if np.median(reproj_errors) > 10.0:  # Threshold in pixels
+            print(f"High reprojection error for frame {i}")
+            continue
+        
+        camera_poses.append((R_new, t_new))
+        
+        # Triangulate new points with the best previous frame
+        best_prev_idx = i - 1  # Default to previous frame
+        max_matches = 0
+        best_matches = None
+        
+        # Find the previous frame with most matches
+        for prev_idx in range(max(0, i-5), i):
+            matches = match_features(descriptors_list[prev_idx], descriptors_list[i])
+            if len(matches) > max_matches:
+                max_matches = len(matches)
+                best_prev_idx = prev_idx
+                best_matches = matches
+        
+        # Filter out already tracked points
+        matches_new = [m for m in best_matches if not any(
+            i in track and track[i] == m.trainIdx for track in point_tracks.values())]
+        
+        if matches_new:
+            # Get camera matrices
+            P1 = K @ np.hstack((camera_poses[best_prev_idx][0], camera_poses[best_prev_idx][1]))
+            P2 = K @ np.hstack((R_new, t_new))
+            
+            pts1 = np.float32([keypoints_list[best_prev_idx][m.queryIdx].pt for m in matches_new])
+            pts2 = np.float32([keypoints_list[i][m.trainIdx].pt for m in matches_new])
+            
+            # Triangulate new points
+            points_4d = cv2.triangulatePoints(P1, P2, pts1.T, pts2.T)
+            new_points_3d = (points_4d / points_4d[3]).T[:, :3]
+            
+            # Filter new points based on reprojection error and cheirality
+            valid_points = []
+            valid_matches = []
+            
+            for j, (point, match) in enumerate(zip(new_points_3d, matches_new)):
+                # Check point is in front of both cameras
+                point_cam1 = camera_poses[best_prev_idx][0] @ point + camera_poses[best_prev_idx][1].ravel()
+                point_cam2 = R_new @ point + t_new.ravel()
+                
+                if point_cam1[2] > 0 and point_cam2[2] > 0:
+                    # Check reprojection error
+                    proj1, _ = cv2.projectPoints(
+                        point.reshape(1, 3), 
+                        cv2.Rodrigues(camera_poses[best_prev_idx][0])[0],
+                        camera_poses[best_prev_idx][1], K, None)
+                    proj2, _ = cv2.projectPoints(point.reshape(1, 3), rvec, tvec, K, None)
+                    
+                    error1 = np.linalg.norm(proj1.ravel() - pts1[j])
+                    error2 = np.linalg.norm(proj2.ravel() - pts2[j])
+                    
+                    if error1 < 5.0 and error2 < 5.0:  # 5 pixel threshold
+                        valid_points.append(point)
+                        valid_matches.append(match)
+            
+            # Add new points and tracks
+            for j, (point, match) in enumerate(zip(valid_points, valid_matches)):
+                track_id = len(point_tracks)
+                point_tracks[track_id] = {
+                    best_prev_idx: keypoints_list[best_prev_idx][match.queryIdx].pt,
+                    i: keypoints_list[i][match.trainIdx].pt
+                }
+                all_points_3d.append(point.tolist())
+        
+        if debug:
+            print(f"Frame {i}: {len(points_2d)} 2D-3D correspondences, "
+                  f"{len(valid_points) if matches_new else 0} new points")
     
-    if len(all_points_3d) > 0:
-        all_points_3d = np.array(all_points_3d)
-        print(f"Final reconstruction has {len(all_points_3d)} points and {len(all_cameras)} cameras")
-    else:
-        print("Warning: No valid points reconstructed")
-        return np.array([]), []
-    
-    return all_points_3d, all_cameras
+    return np.array(all_points_3d), camera_poses, point_tracks
