@@ -15,7 +15,7 @@ def create_camera_geometry(R, t, size=1.0, color=[1, 0, 0]):
         [0.5, -0.5, 1],
         [0.5, 0.5, 1],
         [-0.5, 0.5, 1]
-    ]) * size * 0.2  # Adjusted size to match new scale
+    ]) * size * 0.5  # Made cameras larger for better visibility
     
     lines = np.array([
         [0, 1], [0, 2], [0, 3], [0, 4],  # Lines from center to front face
@@ -34,9 +34,37 @@ def create_camera_geometry(R, t, size=1.0, color=[1, 0, 0]):
     return line_set
 
 
-def visualize_3d_reconstruction(points_3d, R, t, K):
+def create_camera_trajectory(camera_poses):
+    """Create a line set showing the camera trajectory."""
+    points = []
+    lines = []
+    colors = []
+    
+    # Extract camera centers
+    for i, (R, t) in camera_poses.items():
+        points.append(t.ravel())
+        if len(points) > 1:
+            lines.append([len(points)-2, len(points)-1])
+            colors.append([0, 1, 0])  # Green trajectory
+    
+    line_set = o3d.geometry.LineSet()
+    line_set.points = o3d.utility.Vector3dVector(points)
+    line_set.lines = o3d.utility.Vector2iVector(lines)
+    line_set.colors = o3d.utility.Vector3dVector(colors)
+    
+    return line_set
+
+
+def visualize_3d_reconstruction(points_3d, R, t, K, additional_cameras=None):
     """
-    Visualize 3D points and camera poses using Open3D with improved visualization.
+    Visualize 3D points and all camera poses using Open3D.
+    
+    Args:
+        points_3d: Nx3 array of 3D points
+        R: Rotation matrix of the final camera
+        t: Translation vector of the final camera
+        K: Camera intrinsic matrix
+        additional_cameras: Dict of {frame_idx: (R, t)} for all cameras
     """
     # Filter outlier points
     filtered_points = filter_points(points_3d, percentile=98)
@@ -71,6 +99,24 @@ def visualize_3d_reconstruction(points_3d, R, t, K):
     # Second camera
     camera2 = create_camera_geometry(R, t, size=0.2, color=[1, 0, 0])
     vis.add_geometry(camera2)
+    
+    # Add all additional cameras if provided
+    if additional_cameras:
+        for frame_idx, (R_cam, t_cam) in additional_cameras.items():
+            if frame_idx == 0:  # Skip first camera (already added)
+                continue
+            camera = create_camera_geometry(
+                R_cam, 
+                t_cam, 
+                size=0.2, 
+                color=[0.5, 0.5, 0.5]  # Gray color for intermediate cameras
+            )
+            vis.add_geometry(camera)
+    
+    # Add camera trajectory if we have multiple cameras
+    if additional_cameras and len(additional_cameras) > 2:
+        trajectory = create_camera_trajectory(additional_cameras)
+        vis.add_geometry(trajectory)
     
     # Set rendering options
     opt = vis.get_render_option()

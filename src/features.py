@@ -7,11 +7,11 @@ def detect_features(images):
     """
     # Create SIFT with more selective parameters
     sift = cv2.SIFT_create(
-        nfeatures=2000,          # More features for better coverage
-        nOctaveLayers=3,         # Default value
-        contrastThreshold=0.04,  # Increased to get stronger features
-        edgeThreshold=10,        # Default value
-        sigma=1.6                # Default value
+        nfeatures=2000,          
+        nOctaveLayers=3,         
+        contrastThreshold=0.04,  
+        edgeThreshold=10,        
+        sigma=1.6                
     )
     
     keypoints_list = []

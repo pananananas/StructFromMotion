@@ -1,4 +1,3 @@
-from features import match_features
 import numpy as np
 import cv2
 

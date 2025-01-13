@@ -51,3 +51,10 @@
 - [ ] Create test dataset
 - [ ] Implement visualization tools
 - [ ] Set up evaluation metrics
+
+
+
+
+## Potential improvements
+- Checking paralax between initial frames.
+- Loop closure detection.

@@ -7,8 +7,7 @@ import sys
 import cv2
 import os
 
-
-def extract_frames(video_path, frame_interval=30, max_frames=100):
+def extract_frames(video_path, frame_interval=30, max_frames=100, skip_frames=0, scale_factor=1):
     """
     Extract frames from a video file.
 
@@ -16,6 +15,8 @@ def extract_frames(video_path, frame_interval=30, max_frames=100):
         video_path (str): Path to the video file.
         frame_interval (int): Extract one frame every 'frame_interval' frames.
         max_frames (int): Maximum number of frames to extract.
+        skip_frames (int): Number of frames to skip at the start.
+        scale_factor (int): Factor to scale down resolution by (1, 2, or 4).
 
     Returns:
         List of extracted frames as BGR images.
@@ -23,13 +24,22 @@ def extract_frames(video_path, frame_interval=30, max_frames=100):
     if not os.path.isfile(video_path):
         print(f"Video file not found: {video_path}")
         sys.exit(1)
+        
+    if scale_factor not in [1, 2, 4]:
+        print(f"Invalid scale_factor {scale_factor}. Must be 1, 2, or 4.")
+        sys.exit(1)
     
     cap = cv2.VideoCapture(video_path)
     frames = []
     count = 0
     extracted = 0
     
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    # Skip initial frames
+    for _ in range(skip_frames):
+        cap.read()
+        count += 1
+    
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) - skip_frames
     expected_frames = min(max_frames, total_frames // frame_interval)
     
     with tqdm(total=expected_frames, desc="Extracting frames") as pbar:
@@ -38,6 +48,11 @@ def extract_frames(video_path, frame_interval=30, max_frames=100):
             if not ret:
                 break
             if count % frame_interval == 0:
+                if scale_factor > 1:
+                    height, width = frame.shape[:2]
+                    new_height = height // scale_factor
+                    new_width = width // scale_factor
+                    frame = cv2.resize(frame, (new_width, new_height))
                 frames.append(frame)
                 extracted += 1
                 pbar.update(1)
@@ -51,9 +66,18 @@ def extract_frames(video_path, frame_interval=30, max_frames=100):
 def extract_frames_from_dir(directory_path, max_frames=100):
     """
     Extract frames from a directory of images.
+    
+    Args:
+        directory_path: Path to directory containing images
+        max_frames: Maximum number of frames to extract
+        
+    Returns:
+        List of frames as BGR images
     """
     frames = []
     for file in os.listdir(directory_path):
+        if len(frames) >= max_frames:
+            break
         if file.endswith(".JPG") or file.endswith(".png"):
             img = cv2.imread(os.path.join(directory_path, file))
             frames.append(img)

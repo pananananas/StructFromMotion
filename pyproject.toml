@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "icecream>=2.1.4",
+    "ipykernel>=6.29.5",
     "matplotlib>=3.4.0",
     "numpy>=1.21.0",
     "open3d>=0.13.0",
