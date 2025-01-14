@@ -34,28 +34,46 @@ def detect_features(images):
 
 
 
-def match_features(des1, des2, ratio=0.6):  # Stricter ratio test
+def match_features(des1, des2, ratio=0.8, cross_check=True):
     """
-    Match features with stricter filtering.
+    Match features with bi-directional verification.
     """
     if des1 is None or des2 is None:
         return []
     
     FLANN_INDEX_KDTREE = 1
     index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=5)
-    search_params = dict(checks=100)  # More checks for better accuracy
+    search_params = dict(checks=100)
     
     flann = cv2.FlannBasedMatcher(index_params, search_params)
-    try:
-        matches = flann.knnMatch(des1, des2, k=2)
-    except cv2.error as e:
-        print("Error during FLANN matching:", e)
-        return []
     
-    # Stricter ratio test
-    good_matches = []
-    for m, n in matches:
-        if m.distance < ratio * n.distance and m.distance < 200:  # Added absolute distance threshold
-            good_matches.append(m)
+    # Forward match
+    matches_12 = flann.knnMatch(des1, des2, k=2)
     
-    return good_matches
+    # Apply ratio test
+    good_matches_12 = []
+    for m, n in matches_12:
+        if m.distance < ratio * n.distance:
+            good_matches_12.append(m)
+    
+    if not cross_check:
+        return good_matches_12
+    
+    # Backward match for verification
+    matches_21 = flann.knnMatch(des2, des1, k=2)
+    
+    # Apply ratio test
+    good_matches_21 = []
+    for m, n in matches_21:
+        if m.distance < ratio * n.distance:
+            good_matches_21.append(m)
+    
+    # Cross-check
+    verified_matches = []
+    for match_12 in good_matches_12:
+        for match_21 in good_matches_21:
+            if match_12.queryIdx == match_21.trainIdx and match_12.trainIdx == match_21.queryIdx:
+                verified_matches.append(match_12)
+                break
+    
+    return verified_matches

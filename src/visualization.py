@@ -11,11 +11,11 @@ def create_camera_geometry(R, t, size=1.0, color=[1, 0, 0]):
     # Create camera model pointing in the positive z direction
     points = np.array([
         [0, 0, 0],          # Camera center
-        [-0.5, -0.5, 1],    # Front face corners
-        [0.5, -0.5, 1],
-        [0.5, 0.5, 1],
-        [-0.5, 0.5, 1]
-    ]) * size * 0.5  # Made cameras larger for better visibility
+        [-1, -1, 1.5],      # Front face corners - made deeper
+        [1, -1, 1.5],
+        [1, 1, 1.5],
+        [-1, 1, 1.5]
+    ]) * size * 0.5
     
     lines = np.array([
         [0, 1], [0, 2], [0, 3], [0, 4],  # Lines from center to front face
@@ -93,11 +93,11 @@ def visualize_3d_reconstruction(points_3d, R, t, K, additional_cameras=None):
     
     # Add camera geometries with adjusted size
     # First camera at origin
-    camera1 = create_camera_geometry(np.eye(3), np.zeros((3, 1)), size=0.2, color=[0, 1, 0])
+    camera1 = create_camera_geometry(np.eye(3), np.zeros((3, 1)), size=0.5, color=[0, 1, 0])
     vis.add_geometry(camera1)
     
     # Second camera
-    camera2 = create_camera_geometry(R, t, size=0.2, color=[1, 0, 0])
+    camera2 = create_camera_geometry(R, t, size=0.5, color=[1, 0, 0])
     vis.add_geometry(camera2)
     
     # Add all additional cameras if provided
@@ -108,8 +108,8 @@ def visualize_3d_reconstruction(points_3d, R, t, K, additional_cameras=None):
             camera = create_camera_geometry(
                 R_cam, 
                 t_cam, 
-                size=0.2, 
-                color=[0.5, 0.5, 0.5]  # Gray color for intermediate cameras
+                size=0.5,  # Increased size
+                color=[0.5, 0.5, 0.5]
             )
             vis.add_geometry(camera)
     
