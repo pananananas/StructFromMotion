@@ -8,14 +8,14 @@ import os
 
 def create_camera_geometry(R, t, size=1.0, color=[1, 0, 0]):
     """Create a camera geometry for visualization."""
-    # Create camera model pointing in the positive z direction
+    # Create camera model pointing in positive z direction (looking forward)
     points = np.array([
         [0, 0, 0],          # Camera center
-        [-1, -1, 1.5],      # Front face corners - made deeper
-        [1, -1, 1.5],
-        [1, 1, 1.5],
-        [-1, 1, 1.5]
-    ]) * size * 0.5
+        [-1, -1, 2],        # Front face corners - made deeper and larger
+        [1, -1, 2],
+        [1, 1, 2],
+        [-1, 1, 2]
+    ]) * size
     
     lines = np.array([
         [0, 1], [0, 2], [0, 3], [0, 4],  # Lines from center to front face
@@ -23,7 +23,8 @@ def create_camera_geometry(R, t, size=1.0, color=[1, 0, 0]):
     ])
     
     # Transform points by camera pose
-    points = (R @ points.T + t).T
+    # Note: We need to transform from camera to world coordinates
+    points = (R.T @ (points.T - t)).T
     
     # Create LineSet
     line_set = o3d.geometry.LineSet()
@@ -40,9 +41,11 @@ def create_camera_trajectory(camera_poses):
     lines = []
     colors = []
     
-    # Extract camera centers
+    # Extract camera centers (not translation vectors)
     for i, (R, t) in camera_poses.items():
-        points.append(t.ravel())
+        # Convert from translation to camera center: C = -R^T * t
+        center = (-R.T @ t).ravel()
+        points.append(center)
         if len(points) > 1:
             lines.append([len(points)-2, len(points)-1])
             colors.append([0, 1, 0])  # Green trajectory
@@ -127,9 +130,9 @@ def visualize_3d_reconstruction(points_3d, R, t, K, additional_cameras=None):
     # Set camera viewpoint for better initial view
     ctr = vis.get_view_control()
     ctr.set_zoom(0.7)
-    ctr.set_front([0, 0, -1])  # Look towards negative z
-    ctr.set_lookat([0, 0, 0])
-    ctr.set_up([0, -1, 0])
+    ctr.set_front([0, -1, -1])  # Look from above and front
+    ctr.set_lookat([0, 0, 0])   # Look at center
+    ctr.set_up([0, -1, 0])      # Set up direction
     
     # Run visualization
     vis.run()

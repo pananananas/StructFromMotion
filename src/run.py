@@ -3,33 +3,30 @@ from incremental_reconstruction import incremental_reconstruction
 from triangulation import estimate_pose_and_triangulate
 from visualization import visualize_3d_reconstruction
 from features import detect_features, match_features
-import matplotlib.pyplot as plt
 import numpy as np
-import os
 import sys
+import os
+
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 # Config
 output_dir = 'output'
 save_path = f'{output_dir}/points_3d.npy'
 save_ply_path = f'{output_dir}/points_3d.ply'
 
-max_frames = 10
-frame_interval = 45
+max_frames = 12
+frame_interval = 60
 video_path = 'data/rollei3.mov'
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 # Extracting frames
 frames = extract_frames(video_path, frame_interval, max_frames)
-
 # frames = extract_frames_from_dir('data/gerrard-hall/images', max_frames)
+show_frames(frames)
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 # Feature Detection
 keypoints_list, descriptors_list, num_keypoints = detect_features(frames)
-
 print(f"Detected {num_keypoints} keypoints")
-
-show_frames(frames)
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 # Camera Calibration
@@ -40,7 +37,7 @@ print("\nInitializing with first pair...")
 matches_01 = match_features(descriptors_list[0], descriptors_list[1], ratio=0.8, cross_check=True)
 print(f"Found {len(matches_01)} verified matches")
 
-# visualize_matches(frames[0], keypoints_list[0], frames[1], keypoints_list[1], matches_01, max_matches=1000)
+visualize_matches(frames[0], keypoints_list[0], frames[1], keypoints_list[1], matches_01, max_matches=2000)
 
 R, t, points_3d, mask = estimate_pose_and_triangulate(
     keypoints_list[0],
@@ -56,14 +53,13 @@ if R is None:
 
 print(f"Initial reconstruction: {len(points_3d)} points")
 
-# Visualize initial reconstruction
 visualize_3d_reconstruction(points_3d, R, t, K)
 
 
-# Print adjacency matrix
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# Incremental reconstruction
 adj_matrix = print_adjacency_matrix(descriptors_list)
 
-# Proceed with incremental reconstruction
 print("\nPerforming incremental reconstruction...")
 reconstruction_state = incremental_reconstruction(
     frames=frames,

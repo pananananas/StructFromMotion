@@ -194,7 +194,7 @@ def use_camera_calibration():
         print(dist.ravel())
     return K, dist
 
-def print_adjacency_matrix(descriptors_list, ratio=0.8, min_matches=20, window_size=3):
+def print_adjacency_matrix(descriptors_list, ratio=0.8, min_matches=20, window_size=4):
     """
     Print an adjacency matrix showing the number of matches between sequential frames within a window.
     
@@ -207,7 +207,7 @@ def print_adjacency_matrix(descriptors_list, ratio=0.8, min_matches=20, window_s
     Returns:
         numpy array: Adjacency matrix where each cell contains the number of matches
     """
-    from features import match_features  # Import here to avoid circular imports
+    from features import match_features
     
     n_images = len(descriptors_list)
     adj_matrix = np.zeros((n_images, n_images), dtype=int)
