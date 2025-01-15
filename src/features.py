@@ -1,18 +1,29 @@
 from tqdm import tqdm
+import numpy as np
 import cv2
 
-def detect_features(images):
-    """
-    Detect SIFT features and compute descriptors with better parameters.
-    """
-    # Create SIFT with more selective parameters
-    sift = cv2.SIFT_create(
-        nfeatures=2000,          
-        nOctaveLayers=3,         
-        contrastThreshold=0.04,  
-        edgeThreshold=10,        
-        sigma=1.6                
-    )
+def detect_features(images, detector_type='SIFT'):
+
+    if detector_type == 'SIFT':
+        detector = cv2.SIFT_create(
+            nfeatures=2000,          
+            nOctaveLayers=3,         
+            contrastThreshold=0.04,  
+            edgeThreshold=10,        
+            sigma=1.6                
+        )
+    elif detector_type == 'ORB':
+        detector = cv2.ORB_create(
+            nfeatures=2000,
+            scaleFactor=1.2,
+            nlevels=8,
+            edgeThreshold=31,
+            firstLevel=0,
+            WTA_K=2,
+            patchSize=31
+        )
+    else:
+        raise ValueError(f"Unsupported detector type: {detector_type}")
     
     keypoints_list = []
     descriptors_list = []
@@ -21,16 +32,20 @@ def detect_features(images):
     # Convert images to list if it's a generator or other iterable
     images_list = list(images)
     
-    for idx, img in tqdm(enumerate(images_list), total=len(images_list), desc="Detecting features"):
+    for idx, img in tqdm(enumerate(images_list), total=len(images_list), desc=f"Detecting {detector_type} features"):
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        # Add Gaussian blur to reduce noise
         gray = cv2.GaussianBlur(gray, (0, 0), 1.0)
-        keypoints, descriptors = sift.detectAndCompute(gray, None)
+        keypoints, descriptors = detector.detectAndCompute(gray, None)
+        
+        # Convert descriptors to float32 for FLANN matcher compatibility
+        if descriptors is not None and detector_type == 'ORB':
+            descriptors = descriptors.astype(np.float32)
+            
         keypoints_list.append(keypoints)
         descriptors_list.append(descriptors)
         num_keypoints += len(keypoints)
     
-    return keypoints_list, descriptors_list
+    return keypoints_list, descriptors_list, num_keypoints
 
 
 

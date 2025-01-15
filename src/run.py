@@ -1,4 +1,4 @@
-from utils import use_camera_calibration, extract_frames, extract_frames_from_dir, visualize_matches, convert_npy_to_ply
+from utils import use_camera_calibration, extract_frames, extract_frames_from_dir, visualize_matches, convert_npy_to_ply, show_frames
 from incremental_reconstruction import incremental_reconstruction
 from triangulation import estimate_pose_and_triangulate
 from visualization import visualize_3d_reconstruction
@@ -25,13 +25,10 @@ frames = extract_frames(video_path, frame_interval, max_frames)
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 # Feature Detection
-keypoints_list, descriptors_list = detect_features(frames)
+keypoints_list, descriptors_list, num_keypoints = detect_features(frames)
 
-fig, axs = plt.subplots(1, len(frames), figsize=(15, 5))
-for i, frame in enumerate(frames):
-    axs[i].imshow(frame)
-    axs[i].axis('off')
-plt.show()
+print(f"Detected {num_keypoints} keypoints")
+show_frames(frames)
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 # Camera Calibration
@@ -41,6 +38,8 @@ K, dist = use_camera_calibration()
 print("\nInitializing with first pair...")
 matches_01 = match_features(descriptors_list[0], descriptors_list[1], ratio=0.8, cross_check=True)
 print(f"Found {len(matches_01)} verified matches")
+
+visualize_matches(frames[0], keypoints_list[0], frames[1], keypoints_list[1], matches_01, max_matches=1000)
 
 R, t, points_3d, mask = estimate_pose_and_triangulate(
     keypoints_list[0],

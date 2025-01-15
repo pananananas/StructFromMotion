@@ -84,6 +84,15 @@ def extract_frames_from_dir(directory_path, max_frames=100):
     return frames
 
 
+def show_frames(frames):
+    frames = [cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) for frame in frames]
+    fig, axs = plt.subplots(1, len(frames), figsize=(15, 5))
+    for i, frame in enumerate(frames):
+        axs[i].imshow(frame)
+        axs[i].axis('off')
+    
+    plt.show()
+
 def visualize_matches(img1, kp1, img2, kp2, matches, max_matches=50):
     """
     Visualize matches between two images.
@@ -157,8 +166,8 @@ def load_camera_calibration(calibration_path='output/calibration.pkl'):
     
     return calibration_data['camera_matrix'], calibration_data['dist_coeffs']
 
+
 def use_camera_calibration():
-# Load camera calibration parameters
     try:
         K, dist = load_camera_calibration()
         print("\nLoaded camera calibration parameters:")
@@ -170,13 +179,17 @@ def use_camera_calibration():
     except FileNotFoundError as e:
         print(f"\nWarning: {str(e)}")
         print("Using default camera parameters...")
-        # Fallback to default parameters if calibration file not found
+        # Fallback to iPhone 12 Pro parameters
         f_x = 3225.6
         f_y = 3225.6
-        c_x = 2016  # Will be updated with actual image size
-        c_y = 1512  # Will be updated with actual image size
+        c_x = 1200
+        c_y = 1800
         K = np.array([[f_x, 0, c_x],
                     [0, f_y, c_y],
                     [0,  0,    1]])
-        dist = np.zeros(5)  # No distortion correction
+        dist = np.zeros(5)  # No distortion
+        print("Camera Matrix (K):")
+        print(K)
+        print("\nNo distortion:")
+        print(dist.ravel())
     return K, dist
