@@ -6,13 +6,8 @@ import cv2
 import os
 
 # Chessboard parameters
-CHESSBOARD_SIZE = (9, 7)  # number of inner corners (width, height)
-SQUARE_SIZE = 20.0        # size of a square in millimeters
-
-max_frames = 20
-frame_interval = 30
-video_path = 'data/calibrate.MOV'
-
+CHESSBOARD_SIZE = (9, 7)
+SQUARE_SIZE = 20.0
 
 def calibrate_camera(frames):
     """
@@ -24,16 +19,14 @@ def calibrate_camera(frames):
     objp[:,:2] = np.mgrid[0:CHESSBOARD_SIZE[0], 0:CHESSBOARD_SIZE[1]].T.reshape(-1,2)
     objp = objp * SQUARE_SIZE  # Scale to actual size
 
-    # Arrays to store object points and image points
-    objpoints = []  # 3d points in real world space
-    imgpoints = []  # 2d points in image plane
-    used_frames = []  # Store frames where chessboard was detected
+    objpoints = []    # 3d points in real world space
+    imgpoints = []    # 2d points in image plane
+    used_frames = []  # frames with detected chessboard 
 
     print("\nDetecting chessboard corners...")
     for i, frame in enumerate(frames):
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         
-        # Find the chessboard corners
         ret, corners = cv2.findChessboardCorners(gray, CHESSBOARD_SIZE, None)
 
         if ret:
@@ -41,12 +34,10 @@ def calibrate_camera(frames):
             criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
             corners2 = cv2.cornerSubPix(gray, corners, (11,11), (-1,-1), criteria)
             
-            # Add the points
             objpoints.append(objp)
             imgpoints.append(corners2)
             used_frames.append(frame)
             
-            # Plot and save the corner detection
             plot_chessboard_corners(frame, corners2, ret, i, CHESSBOARD_SIZE)
             print(f"Successfully detected corners in frame {i+1}")
 
@@ -57,7 +48,11 @@ def calibrate_camera(frames):
     print("Performing camera calibration...")
 
     ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(
-        objpoints, imgpoints, gray.shape[::-1], None, None
+        objpoints, 
+        imgpoints, 
+        gray.shape[::-1], 
+        None, 
+        None
     )
 
     mean_error = plot_reprojection_error(objpoints, imgpoints, rvecs, tvecs, mtx, dist, gray.shape[::-1], used_frames)
@@ -80,12 +75,16 @@ def save_calibration(mtx, dist, output_dir='output'):
     with open(output_path, 'wb') as f:
         pickle.dump(calibration_data, f)
     print(f"\nCalibration data saved to {output_path}")
-
-
+    
 
 if __name__ == "__main__":
 
+    max_frames = 20
+    frame_interval = 30
+    video_path = 'data/calibrate.MOV'
+    
     print("Extracting frames from video...")
+
     frames = extract_frames(video_path, frame_interval, max_frames)
 
     if len(frames) == 0:

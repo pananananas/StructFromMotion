@@ -3,18 +3,17 @@ from incremental_reconstruction import incremental_reconstruction
 from triangulation import estimate_pose_and_triangulate
 from visualization import visualize_3d_reconstruction
 from features import detect_features, match_features
-from icecream import ic
+import matplotlib.pyplot as plt
 import numpy as np
 import os
 import sys
-
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 # Config
 output_dir = 'output'
 save_path = f'{output_dir}/points_3d.npy'
 save_ply_path = f'{output_dir}/points_3d.ply'
 
-max_frames = 10
+max_frames = 3
 frame_interval = 45
 video_path = 'data/rollei3.mov'
 
@@ -27,6 +26,12 @@ frames = extract_frames(video_path, frame_interval, max_frames)
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 # Feature Detection
 keypoints_list, descriptors_list = detect_features(frames)
+
+fig, axs = plt.subplots(1, len(frames), figsize=(15, 5))
+for i, frame in enumerate(frames):
+    axs[i].imshow(frame)
+    axs[i].axis('off')
+plt.show()
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 # Camera Calibration
