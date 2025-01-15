@@ -193,3 +193,63 @@ def use_camera_calibration():
         print("\nNo distortion:")
         print(dist.ravel())
     return K, dist
+
+def print_adjacency_matrix(descriptors_list, ratio=0.8, min_matches=20, window_size=3):
+    """
+    Print an adjacency matrix showing the number of matches between sequential frames within a window.
+    
+    Parameters:
+        descriptors_list: List of descriptors for each image
+        ratio: Ratio test threshold for feature matching (default: 0.8)
+        min_matches: Minimum number of matches to consider images connected (default: 20)
+        window_size: Size of sliding window for matching (default: 3)
+    
+    Returns:
+        numpy array: Adjacency matrix where each cell contains the number of matches
+    """
+    from features import match_features  # Import here to avoid circular imports
+    
+    n_images = len(descriptors_list)
+    adj_matrix = np.zeros((n_images, n_images), dtype=int)
+    
+    print("\nImage Adjacency Matrix (number of matches within window):")
+    print("-" * (n_images * 6 + 1))
+    
+    # Build adjacency matrix using sliding window
+    for i in range(n_images - 1):
+        # Only match with next window_size frames
+        for j in range(i + 1, min(i + window_size + 1, n_images)):
+            matches = match_features(
+                descriptors_list[i],
+                descriptors_list[j],
+                ratio=ratio,
+                cross_check=True
+            )
+            num_matches = len(matches)
+            adj_matrix[i, j] = num_matches
+            adj_matrix[j, i] = num_matches  # Keep matrix symmetric for visualization
+    
+    # Print header
+    print("    ", end="")
+    for i in range(n_images):
+        print(f"{i:4d} ", end="")
+    print("\n" + "-" * (n_images * 6 + 1))
+    
+    # Print matrix with row labels
+    for i in range(n_images):
+        print(f"{i:2d} |", end=" ")
+        for j in range(n_images):
+            if i == j:
+                print("  -  ", end="")
+            else:
+                matches = adj_matrix[i, j]
+                if matches == 0:
+                    print("  .  ", end="")  # Dots for pairs not in window
+                elif matches >= min_matches:
+                    print(f"\033[92m{matches:4d}\033[0m ", end="")  # Green for good matches
+                else:
+                    print(f"{matches:4d} ", end="")
+        print()
+    
+    print("-" * (n_images * 6 + 1))
+    return adj_matrix
