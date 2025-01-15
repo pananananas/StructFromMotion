@@ -249,7 +249,10 @@ def optimize_poses_and_points(state, keypoints_list, K):
     """
     Simple bundle adjustment using motion-only optimization.
     """
-    for frame_idx in range(2, len(state.camera_poses)):
+    # Only process frames that exist in camera_poses
+    processed_frames = sorted(state.camera_poses.keys())  # Process all frames
+    
+    for frame_idx in processed_frames:
         R, t = state.camera_poses[frame_idx]
         points_3d = []
         points_2d = []

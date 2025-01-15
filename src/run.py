@@ -28,7 +28,7 @@ frames = extract_frames(video_path, frame_interval, max_frames)
 keypoints_list, descriptors_list, num_keypoints = detect_features(frames)
 
 print(f"Detected {num_keypoints} keypoints")
-show_frames(frames)
+# show_frames(frames)
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 # Camera Calibration
@@ -39,7 +39,7 @@ print("\nInitializing with first pair...")
 matches_01 = match_features(descriptors_list[0], descriptors_list[1], ratio=0.8, cross_check=True)
 print(f"Found {len(matches_01)} verified matches")
 
-visualize_matches(frames[0], keypoints_list[0], frames[1], keypoints_list[1], matches_01, max_matches=1000)
+# visualize_matches(frames[0], keypoints_list[0], frames[1], keypoints_list[1], matches_01, max_matches=1000)
 
 R, t, points_3d, mask = estimate_pose_and_triangulate(
     keypoints_list[0],
