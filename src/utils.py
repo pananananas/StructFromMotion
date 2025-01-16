@@ -272,3 +272,115 @@ def compute_baseline_angle(R1, t1, R2, t2) -> float:
     angle2 = np.arccos(np.clip(np.dot(-baseline.flatten(), v2.flatten()), -1.0, 1.0))
     
     return min(angle1, angle2) * 180 / np.pi
+
+
+def visualize_all_matches(frames, keypoints_list, descriptors_list, window_size=5, ratio=0.8, max_matches=2000, output_dir='output'):
+    """
+    Visualize matches between sequential frames within a window and save to file.
+    
+    Parameters:
+        frames: List of input frames
+        keypoints_list: List of keypoints for each frame
+        descriptors_list: List of descriptors for each frame
+        window_size: Size of sliding window for matching
+        ratio: Ratio test threshold for feature matching
+        max_matches: Maximum number of matches to display
+        output_dir: Directory to save visualization
+    """
+    from features import match_features
+    import matplotlib.pyplot as plt
+    
+    n_images = len(frames)
+    
+    # Create output directory if it doesn't exist
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    
+    # Calculate grid size
+    total_pairs = sum(1 for i in range(n_images - 1) 
+                     for j in range(i + 1, min(i + window_size + 1, n_images)))
+    grid_size = int(np.ceil(np.sqrt(total_pairs)))
+    
+    # Create figure
+    fig = plt.figure(figsize=(grid_size * 6, grid_size * 4))
+    plt.suptitle("Feature Matches Between Sequential Frames", fontsize=16, y=0.95)
+    
+    plot_idx = 1
+    for i in range(n_images - 1):
+        for j in range(i + 1, min(i + window_size + 1, n_images)):
+            # Match features
+            matches = match_features(
+                descriptors_list[i],
+                descriptors_list[j],
+                ratio=ratio,
+                cross_check=True
+            )
+            
+            # Create subplot
+            ax = fig.add_subplot(grid_size, grid_size, plot_idx)
+            
+            # Draw matches
+            matched_img = cv2.drawMatches(
+                frames[i], keypoints_list[i],
+                frames[j], keypoints_list[j],
+                matches[:max_matches], None,
+                flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS
+            )
+            
+            ax.imshow(cv2.cvtColor(matched_img, cv2.COLOR_BGR2RGB))
+            ax.set_title(f'Frames {i}-{j}: {len(matches)} matches')
+            ax.axis('off')
+            
+            plot_idx += 1
+    
+    # Adjust layout and save
+    plt.tight_layout()
+    save_path = os.path.join(output_dir, 'feature_matches.png')
+    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    print(f"\nSaved feature matches visualization to {save_path}")
+    plt.close()
+
+
+def visualize_all_keypoints(frames, keypoints_list, output_dir='output'):
+    """
+    Visualize keypoints for all frames and save to file.
+    
+    Parameters:
+        frames: List of input frames
+        keypoints_list: List of keypoints for each frame
+        output_dir: Directory to save visualization
+    """
+    import matplotlib.pyplot as plt
+    
+    n_images = len(frames)
+    
+    # Calculate grid size
+    grid_size = int(np.ceil(np.sqrt(n_images)))
+    
+    # Create figure
+    fig = plt.figure(figsize=(grid_size * 6, grid_size * 4))
+    plt.suptitle("Detected Keypoints in Each Frame", fontsize=16, y=0.95)
+    
+    for i in range(n_images):
+        # Create subplot
+        ax = fig.add_subplot(grid_size, grid_size, i + 1)
+        
+        # Draw keypoints
+        img_with_kp = cv2.drawKeypoints(
+            frames[i],
+            keypoints_list[i],
+            None,
+            color=(0, 255, 0),
+            flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS
+        )
+        
+        ax.imshow(cv2.cvtColor(img_with_kp, cv2.COLOR_BGR2RGB))
+        ax.set_title(f'Frame {i}: {len(keypoints_list[i])} keypoints')
+        ax.axis('off')
+    
+    # Adjust layout and save
+    plt.tight_layout()
+    save_path = os.path.join(output_dir, 'keypoints.png')
+    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    print(f"\nSaved keypoints visualization to {save_path}")
+    plt.close()

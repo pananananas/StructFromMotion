@@ -1,4 +1,8 @@
-from utils import use_camera_calibration, extract_frames, extract_frames_from_dir, visualize_matches, convert_npy_to_ply, show_frames, print_adjacency_matrix
+from utils import (
+    use_camera_calibration, extract_frames, extract_frames_from_dir,
+    visualize_matches, convert_npy_to_ply, show_frames,
+    print_adjacency_matrix, visualize_all_matches, visualize_all_keypoints
+)
 from incremental_reconstruction import incremental_reconstruction
 from triangulation import estimate_pose_and_triangulate
 from visualization import visualize_3d_reconstruction
@@ -28,6 +32,8 @@ show_frames(frames)
 keypoints_list, descriptors_list, num_keypoints = detect_features(frames)
 print(f"Detected {num_keypoints} keypoints")
 
+# visualize_all_keypoints(frames, keypoints_list, output_dir=output_dir)
+
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 # Camera Calibration
 K, dist = use_camera_calibration()
@@ -39,6 +45,8 @@ matches_01 = match_features(descriptors_list[0], descriptors_list[1], ratio=0.8,
 print(f"Found {len(matches_01)} verified matches")
 
 # visualize_matches(frames[0], keypoints_list[0], frames[1], keypoints_list[1], matches_01, max_matches=2000)
+
+# visualize_all_matches(frames, keypoints_list, descriptors_list, window_size=5, output_dir=output_dir)
 
 R, t, points_3d, mask = estimate_pose_and_triangulate(
     keypoints_list[0],
@@ -54,7 +62,7 @@ if R is None:
 
 print(f"Initial reconstruction: {len(points_3d)} points")
 
-# visualize_3d_reconstruction(points_3d, R, t, K)
+visualize_3d_reconstruction(points_3d, R, t, K)
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
