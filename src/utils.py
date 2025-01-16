@@ -182,8 +182,8 @@ def use_camera_calibration():
         # Fallback to iPhone 12 Pro parameters
         f_x = 3225.6
         f_y = 3225.6
-        c_x = 1200
-        c_y = 1800
+        c_x = 2016
+        c_y = 1512
         K = np.array([[f_x, 0, c_x],
                     [0, f_y, c_y],
                     [0,  0,    1]])
