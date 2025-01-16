@@ -194,7 +194,7 @@ def use_camera_calibration():
         print(dist.ravel())
     return K, dist
 
-def print_adjacency_matrix(descriptors_list, ratio=0.8, min_matches=20, window_size=4):
+def print_adjacency_matrix(descriptors_list, ratio=0.8, min_matches=20, window_size=5):
     """
     Print an adjacency matrix showing the number of matches between sequential frames within a window.
     
@@ -253,3 +253,22 @@ def print_adjacency_matrix(descriptors_list, ratio=0.8, min_matches=20, window_s
     
     print("-" * (n_images * 6 + 1))
     return adj_matrix
+
+
+def compute_baseline_angle(R1, t1, R2, t2) -> float:
+    """Compute baseline angle between two cameras."""
+    # Ensure vectors are properly shaped
+    c1 = -R1.T @ t1.reshape(3, 1)  # Camera center 1
+    c2 = -R2.T @ t2.reshape(3, 1)  # Camera center 2
+    v1 = R1.T @ np.array([0, 0, 1]).reshape(3, 1)  # View direction 1
+    v2 = R2.T @ np.array([0, 0, 1]).reshape(3, 1)  # View direction 2
+    
+    # Compute baseline vector
+    baseline = c2 - c1
+    baseline = baseline / np.linalg.norm(baseline)
+    
+    # Compute angles
+    angle1 = np.arccos(np.clip(np.dot(baseline.flatten(), v1.flatten()), -1.0, 1.0))
+    angle2 = np.arccos(np.clip(np.dot(-baseline.flatten(), v2.flatten()), -1.0, 1.0))
+    
+    return min(angle1, angle2) * 180 / np.pi

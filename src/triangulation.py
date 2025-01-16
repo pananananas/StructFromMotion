@@ -3,9 +3,7 @@ import cv2
 
 
 def estimate_pose_and_triangulate(kp1, kp2, matches, K, debug=False):
-    """
-    Estimate camera pose and triangulate 3D points with improved robustness.
-    """
+    
     if len(matches) < 8:
         if debug:
             print("Not enough matches for pose estimation")
@@ -26,7 +24,7 @@ def estimate_pose_and_triangulate(kp1, kp2, matches, K, debug=False):
         focal=1.0, 
         pp=(0., 0.),
         method=cv2.RANSAC,
-        prob=0.999,
+        prob=0.999, # parameter for RANSAC
         threshold=3.0/K[0,0]  # Convert threshold to normalized coordinates
     )
 
@@ -48,7 +46,13 @@ def estimate_pose_and_triangulate(kp1, kp2, matches, K, debug=False):
     P1 = np.hstack((np.eye(3), np.zeros((3,1))))
     P2 = np.hstack((R, t))
     
-    points_4d = cv2.triangulatePoints(P1, P2, pts1_norm.reshape(-1,2).T, pts2_norm.reshape(-1,2).T)
+    points_4d = cv2.triangulatePoints(
+        P1, 
+        P2, 
+        pts1_norm.reshape(-1,2).T, 
+        pts2_norm.reshape(-1,2).T
+    )
+    # Returns 4D points (affine(W*X, W*Y, W*Z, W)), divide by 4th coordinate (scalar W) to get 3D points
     points_3d = (points_4d / points_4d[3]).T[:, :3]
     
     # Check points are in front of both cameras
@@ -63,7 +67,7 @@ def estimate_pose_and_triangulate(kp1, kp2, matches, K, debug=False):
             print("Too few points in front of cameras")
         return None, None, None, None
     
-    # Scale reconstruction to have reasonable size
+    # Scale reconstruction
     scale = 1.0 / np.median(np.abs(points_3d))
     points_3d *= scale
     t *= scale

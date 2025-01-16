@@ -1,71 +1,21 @@
+from utils import compute_baseline_angle
 from triangulation import estimate_pose_and_triangulate
 from typing import List, Tuple, Dict
 from features import match_features
 from dataclasses import dataclass
 import numpy as np
-import logging
 import cv2
 
 @dataclass
 class ReconstructionState:
-    """Stores the state of the reconstruction process."""
     camera_poses: Dict[int, Tuple[np.ndarray, np.ndarray]]  # frame_idx -> (R, t)
     points_3d: np.ndarray
     point_tracks: Dict[int, List[Tuple[int, int]]]  # track_id -> [(frame_idx, keypoint_idx)]
-    track_to_point: Dict[int, int]  # track_id -> point_3d_idx
-    scale_factors: List[float]
+    track_to_point: Dict[int, int]                  # track_id -> point_3d_idx
 
-def compute_relative_scale(points_3d_prev: np.ndarray, points_3d_new: np.ndarray) -> float:
-    """
-    Compute relative scale between two sets of 3D points to maintain consistent scale.
-    Uses median distance ratios for robustness.
-    """
-    if len(points_3d_prev) < 4 or len(points_3d_new) < 4:
-        print("Warning: Too few points for reliable scale computation")
-        return 1.0
-
-    # Compute pairwise distances for both point sets
-    def compute_distances(points):
-        dists = []
-        for i in range(len(points)):
-            for j in range(i + 1, len(points)):
-                dist = np.linalg.norm(points[i] - points[j])
-                if dist > 1e-10:  # Avoid zero distances
-                    dists.append(dist)
-        return np.array(dists)
-
-    dist_prev = compute_distances(points_3d_prev)
-    dist_new = compute_distances(points_3d_new)
-    
-    if len(dist_prev) == 0 or len(dist_new) == 0:
-        print("Warning: Could not compute distances for scale estimation")
-        return 1.0
-    
-    # Use median distance ratio for scale
-    scale = np.median(dist_prev) / np.median(dist_new)
-    
-    # Limit scale factor to reasonable range
-    scale = np.clip(scale, 0.1, 10.0)
-    
-    return scale
-
-def find_common_matches(matches_dict: Dict[Tuple[int, int], List]) -> List[Tuple[int, int, int]]:
-    """
-    Find keypoints that match across multiple frames in the sliding window.
-    Returns: List of (frame1_idx, frame2_idx, num_matches)
-    """
-    common_matches = []
-    frame_pairs = list(matches_dict.keys())
-    
-    for i, (frame1, frame2) in enumerate(frame_pairs):
-        num_matches = len(matches_dict[(frame1, frame2)])
-        if num_matches >= 20:  # Minimum number of matches threshold
-            common_matches.append((frame1, frame2, num_matches))
-    
-    return sorted(common_matches, key=lambda x: x[2], reverse=True)
 
 def build_feature_tracks(keypoints_list, descriptors_list, window_size=3):
-    """Build consistent feature tracks across multiple frames."""
+    """Build feature tracks across multiple frames."""
     tracks = {}
     next_track_id = 0
     keypoint_to_track = [{} for _ in range(len(keypoints_list))]
@@ -75,11 +25,10 @@ def build_feature_tracks(keypoints_list, descriptors_list, window_size=3):
         # Match with next few frames in window
         for offset in range(1, min(window_size, len(keypoints_list) - frame_idx)):
             next_idx = frame_idx + offset
-            # Use same ratio test as initialization
             matches = match_features(
                 descriptors_list[frame_idx], 
                 descriptors_list[next_idx],
-                ratio=0.8  # Changed from 0.7 to 0.8
+                ratio=0.8
             )
             print(f"Matches between frames {frame_idx}-{next_idx}: {len(matches)}")
             
@@ -102,73 +51,25 @@ def build_feature_tracks(keypoints_list, descriptors_list, window_size=3):
                     keypoint_to_track[frame_idx][query_idx] = track_id
                     keypoint_to_track[next_idx][train_idx] = track_id
     
-    # Filter tracks - keep only those visible in at least 2 frames (changed from 3)
     filtered_tracks = {k: v for k, v in tracks.items() if len(v) >= 2}
     return filtered_tracks
 
-def triangulate_track(track, keypoints_list, camera_poses, K):
-    """
-    Triangulate a 3D point from a feature track using all available views.
-    """
-    # Filter track to only use frames that have camera poses
-    valid_track = [(f, kp) for f, kp in track if f in camera_poses]
-    
-    if len(valid_track) < 2:
-        return None  # Need at least 2 views for triangulation
-    
-    points_2d = []
-    projection_matrices = []
-    
-    for frame_idx, kp_idx in valid_track:
-        R, t = camera_poses[frame_idx]
-        P = K @ np.hstack((R, t))
-        point_2d = keypoints_list[frame_idx][kp_idx].pt
-        
-        points_2d.append(point_2d)
-        projection_matrices.append(P)
-    
-    points_2d = np.array(points_2d)
-    projection_matrices = np.array(projection_matrices)
-    
-    # Triangulate using first two views
-    points_4d = cv2.triangulatePoints(
-        projection_matrices[0],
-        projection_matrices[1],
-        points_2d[0].reshape(-1, 1, 2),
-        points_2d[1].reshape(-1, 1, 2)
-    )
-    
-    point_3d = (points_4d / points_4d[3])[:-1].reshape(3)
-    
-    # Verify reprojection error in all valid views
-    max_error = 0
-    for i, (frame_idx, kp_idx) in enumerate(valid_track):
-        P = projection_matrices[i]
-        point_projected = P @ np.append(point_3d, 1)
-        point_projected = point_projected[:2] / point_projected[2]
-        error = np.linalg.norm(point_projected - points_2d[i])
-        max_error = max(max_error, error)
-    
-    return point_3d if max_error < 5.0 else None
 
 def initialize_reconstruction(keypoints_list, descriptors_list, K) -> ReconstructionState:
-    """Initialize reconstruction from first pair of frames."""
     print("Initializing reconstruction from first pair...")
     
-    # Use the same ratio test as in the original reconstruction
-    matches = match_features(descriptors_list[0], descriptors_list[1], ratio=0.8)  # Changed from 0.7 to 0.8
+    matches = match_features(descriptors_list[0], descriptors_list[1], ratio=0.8)
     print(f"Found {len(matches)} matches for initialization")
     
     if len(matches) < 100:
         raise RuntimeError(f"Insufficient matches for initialization: {len(matches)}")
     
-    # Estimate pose and triangulate initial points
     R, t, points_3d, mask = estimate_pose_and_triangulate(
         keypoints_list[0],
         keypoints_list[1],
         matches,
         K,
-        debug=True  # Enable debug output to see what's happening
+        debug=True
     )
     
     if R is None or points_3d is None:
@@ -183,8 +84,7 @@ def initialize_reconstruction(keypoints_list, descriptors_list, K) -> Reconstruc
         },
         points_3d=points_3d,
         point_tracks={},
-        track_to_point={},
-        scale_factors=[]
+        track_to_point={}
     )
     
     # Initialize point tracks and mapping
@@ -197,53 +97,6 @@ def initialize_reconstruction(keypoints_list, descriptors_list, K) -> Reconstruc
     
     return state
 
-def estimate_camera_pose(points_3d, points_2d, K):
-    """
-    Estimate camera pose using PnP with fallback options.
-    """
-    if len(points_3d) < 10:
-        return None, None, None
-    
-    # First try simple PnP
-    success, R_vec, t = cv2.solvePnP(
-        points_3d,
-        points_2d,
-        K,
-        None,
-        flags=cv2.SOLVEPNP_ITERATIVE
-    )
-    
-    if not success:
-        print("Initial PnP failed, trying RANSAC...")
-        return None, None, None
-    
-    # Convert rotation vector to matrix
-    R, _ = cv2.Rodrigues(R_vec)
-    
-    # Try to refine with RANSAC
-    try:
-        success, R_vec_ransac, t_ransac, inliers = cv2.solvePnPRansac(
-            points_3d,
-            points_2d,
-            K,
-            None,
-            cv2.Rodrigues(R)[0],
-            t,
-            useExtrinsicGuess=True,
-            iterationsCount=100,
-            reprojectionError=8.0,
-            confidence=0.99
-        )
-        
-        if success and inliers is not None and len(inliers) >= 10:
-            R_ransac, _ = cv2.Rodrigues(R_vec_ransac)
-            return R_ransac, t_ransac, inliers.ravel().astype(bool)
-            
-    except cv2.error as e:
-        print(f"RANSAC refinement failed: {e}")
-    
-    # If RANSAC fails, return initial estimate
-    return R, t, np.ones(len(points_3d), dtype=bool)
 
 def optimize_poses_and_points(state, keypoints_list, K):
     """
@@ -295,70 +148,13 @@ def optimize_poses_and_points(state, keypoints_list, K):
             R_new, _ = cv2.Rodrigues(R_new)
             state.camera_poses[frame_idx] = (R_new, t_new)
 
-def triangulate_points(points1, points2, P1, P2):
-    """Triangulate points from two views."""
-    points_4d = cv2.triangulatePoints(P1, P2, points1.T, points2.T)
-    points_3d = (points_4d / points_4d[3]).T[:, :3]
-    
-    # Check points are in front of both cameras
-    depths1 = points_3d[:, 2]
-    depths2 = (P2[:3, :3] @ points_3d.T + P2[:3, 3:4]).T[:, 2]
-    mask = (depths1 > 0) & (depths2 > 0)
-    
-    return points_3d, mask
-
-def align_reconstructions(points1, points2, R1, t1, R2, t2):
-    """
-    Align second reconstruction to the first one using common points.
-    Returns transformation (R, t, scale) that transforms points2 to points1's coordinate system.
-    """
-    # Convert points to homogeneous coordinates
-    points1_h = np.hstack([points1, np.ones((len(points1), 1))])
-    points2_h = np.hstack([points2, np.ones((len(points2), 1))])
-    
-    # Create transformation matrices
-    T1 = np.vstack([np.hstack([R1, t1]), [0, 0, 0, 1]])
-    T2 = np.vstack([np.hstack([R2, t2]), [0, 0, 0, 1]])
-    
-    # Compute relative transformation
-    T_rel = np.linalg.inv(T1) @ T2
-    
-    R_rel = T_rel[:3, :3]
-    t_rel = T_rel[:3, 3:]
-    
-    # Compute scale by comparing distances
-    dist1 = np.mean([np.linalg.norm(p1 - p2) for i, p1 in enumerate(points1) 
-                     for p2 in points1[i+1:]])
-    dist2 = np.mean([np.linalg.norm(p1 - p2) for i, p1 in enumerate(points2) 
-                     for p2 in points2[i+1:]])
-    scale = dist1 / dist2 if dist2 > 0 else 1.0
-    
-    return R_rel, t_rel, scale
-
-def compute_baseline_angle(R1, t1, R2, t2) -> float:
-    """Compute baseline angle between two cameras."""
-    # Ensure vectors are properly shaped
-    c1 = -R1.T @ t1.reshape(3, 1)  # Camera center 1
-    c2 = -R2.T @ t2.reshape(3, 1)  # Camera center 2
-    v1 = R1.T @ np.array([0, 0, 1]).reshape(3, 1)  # View direction 1
-    v2 = R2.T @ np.array([0, 0, 1]).reshape(3, 1)  # View direction 2
-    
-    # Compute baseline vector
-    baseline = c2 - c1
-    baseline = baseline / np.linalg.norm(baseline)
-    
-    # Compute angles
-    angle1 = np.arccos(np.clip(np.dot(baseline.flatten(), v1.flatten()), -1.0, 1.0))
-    angle2 = np.arccos(np.clip(np.dot(-baseline.flatten(), v2.flatten()), -1.0, 1.0))
-    
-    return min(angle1, angle2) * 180 / np.pi
 
 def incremental_reconstruction(frames, keypoints_list, descriptors_list, K, window_size=5):
     """Perform incremental reconstruction with improved camera pose estimation."""
-    # Parameters - made more lenient
-    MIN_BASELINE_ANGLE = 1.0  # degrees
-    MAX_BASELINE_ANGLE = 90.0  # degrees
-    REPROJECTION_ERROR_THRESHOLD = 8.0  # pixels
+    
+    MIN_BASELINE_ANGLE = 1.0            # Angle thresholds [degrees]
+    MAX_BASELINE_ANGLE = 90.0
+    REPROJECTION_ERROR_THRESHOLD = 8.0  # Reprojection error threshold [pixels]
     
     # Initialize reconstruction with first pair
     state = initialize_reconstruction(keypoints_list, descriptors_list, K)
@@ -369,7 +165,7 @@ def incremental_reconstruction(frames, keypoints_list, descriptors_list, K, wind
     print(f"Built {len(all_tracks)} feature tracks")
     
     # Process frames sequentially
-    processed_frames = {0, 1}  # First two frames are already processed
+    processed_frames = {0, 1} 
     
     for new_idx in range(2, len(frames)):
         print(f"\nProcessing frame {new_idx}")
@@ -427,7 +223,7 @@ def incremental_reconstruction(frames, keypoints_list, descriptors_list, K, wind
         best_points_3d = best_points_3d.reshape(-1, 3)
         best_points_2d = best_points_2d.reshape(-1, 2)
         
-        # Try different PnP methods
+        # Try PnP methods
         for pnp_method in [cv2.SOLVEPNP_EPNP, cv2.SOLVEPNP_P3P, cv2.SOLVEPNP_ITERATIVE]:
             try:
                 success, R_vec, t, inliers = cv2.solvePnPRansac(
@@ -537,5 +333,4 @@ def incremental_reconstruction(frames, keypoints_list, descriptors_list, K, wind
         
         # Optimize the latest camera pose
         optimize_poses_and_points(state, keypoints_list, K)
-    
     return state 

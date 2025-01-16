@@ -13,7 +13,7 @@ output_dir = 'output'
 save_path = f'{output_dir}/points_3d.npy'
 save_ply_path = f'{output_dir}/points_3d.ply'
 
-max_frames = 12
+max_frames = 10
 frame_interval = 60
 video_path = 'data/rollei3.mov'
 
@@ -32,12 +32,13 @@ print(f"Detected {num_keypoints} keypoints")
 # Camera Calibration
 K, dist = use_camera_calibration()
 
-# Initialize with first pair
-print("\nInitializing with first pair...")
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# Feature Matching
+print("\nProcessing first pair...")
 matches_01 = match_features(descriptors_list[0], descriptors_list[1], ratio=0.8, cross_check=True)
 print(f"Found {len(matches_01)} verified matches")
 
-visualize_matches(frames[0], keypoints_list[0], frames[1], keypoints_list[1], matches_01, max_matches=2000)
+# visualize_matches(frames[0], keypoints_list[0], frames[1], keypoints_list[1], matches_01, max_matches=2000)
 
 R, t, points_3d, mask = estimate_pose_and_triangulate(
     keypoints_list[0],
@@ -53,7 +54,7 @@ if R is None:
 
 print(f"Initial reconstruction: {len(points_3d)} points")
 
-visualize_3d_reconstruction(points_3d, R, t, K)
+# visualize_3d_reconstruction(points_3d, R, t, K)
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 

@@ -1,3 +1,5 @@
+# Implementation from: docs.opencv.org/4.x/dc/dbb/tutorial_py_calibration.html
+
 from visualization import plot_chessboard_corners, plot_reprojection_error
 from utils import extract_frames
 import numpy as np
